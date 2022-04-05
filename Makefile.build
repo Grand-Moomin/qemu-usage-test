@@ -1,0 +1,55 @@
+SRCDIR = ..
+
+all: kernel.bin loader.bin
+
+include ../Make.config
+include ../Make.vars
+
+kernel.bin: CPPFLAGS += -I$(SRCDIR)/lib/kernel -I$(SRCDIR)/lib/asm
+
+# Boot
+boot_SRC = boot/start.S
+
+# Kernel
+kernel_SRC = kernel/init.c
+kernel_SRC += kernel/utils.c
+kernel_SRC += kernel/isr-stubs.S
+kernel_SRC += kernel/interrupt.c
+kernel_SRC += kernel/sync.c
+kernel_SRC += kernel/mm.c
+kernel_SRC += kernel/sched.c
+kernel_SRC += kernel/switch.S
+
+# Libs
+lib_SRC = lib/string.c
+lib_SRC += lib/vsprintf.c
+lib_SRC += lib/kernel/bitmap.c
+
+# Devices
+devices_SRC = devices/fb.c
+devices_SRC += devices/pic.c
+devices_SRC += devices/hw_timer.c
+devices_SRC += devices/block.c
+devices_SRC += devices/ide.c
+devices_SRC += devices/serial.c
+devices_SRC += devices/kbd.c
+
+SOURCES = $(foreach dir,$(KERNEL_SUBDIRS),$($(dir)_SRC))
+OBJECTS = $(patsubst %.c,%.o,$(patsubst %.S,%.o,$(SOURCES)))
+DEPENDS = $(patsubst %.o,%.d,$(OBJECTS))
+
+kernel/kernel.lds.s: CPPFLAGS += -P
+kernel/kernel.lds.s: kernel/kernel.lds.S kernel/loader.h
+
+kernel.o: kernel/kernel.lds.s $(OBJECTS)
+	$(LD) -T $< -o $@ $(OBJECTS)
+
+kernel.bin: kernel.o
+	$(OBJCOPY) -R .note -R .comment -S $< $@
+
+boot/loader.o: boot/loader.S
+	$(CC) -c $< -o $@ $(ASFLAGS) $(CPPFLAGS)
+
+loader.bin: boot/loader.o
+	$(LD) -N -e 0 -Ttext 0x7c00 --oformat binary -o $@ $<
+
